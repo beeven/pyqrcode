@@ -150,9 +150,8 @@ class FinderPatternFinder(object):
 
             i += iSkip
 
-        patternInfo = self.selectBestPatterns()
-        self.orderBestPatterns(patternInfo)
-        return FinderPatternInfo(patternInfo)
+        self.selectBestPatterns()
+        return FinderPatternInfo(self.possibleCenters)
 
     
 
@@ -336,6 +335,10 @@ class FinderPatternFinder(object):
 
 
     def findRowSkip(self):
+        """ return: Number of rows we could safely skip during scanning, based on the first
+            two finder patterns that have been located. In some cases their position will allow us
+            to infer that the third pattern must lie below a certain point father down in the image.
+        """
         maxSkip = len(self.possibleCenters)
         if maxSkip <= 1:
             return 0
@@ -352,7 +355,7 @@ class FinderPatternFinder(object):
                     # difference in the x / y coordinates of the two centers.
                     # This is the case where you find top left last.
                     self.hasSkipped = True
-                    return abs(firstConfirmedCenter.posX - center.posX) - abs(firstConfirmedCenter.posY - center.posY)
+                    return (abs(firstConfirmedCenter.posX - center.posX) - abs(firstConfirmedCenter.posY - center.posY)) / 2
         return 0
             
 
@@ -414,16 +417,54 @@ class FinderPatternFinder(object):
         if len(self.possibleCenters) > 3:
             totalModuleSize = sum(map(lambda x:x.estimatedModuleSize, self.possibleCenters))
             average = totalModuleSize * 1.0 / len(self.possibleCenters)
-            comparer = lambda avg: lambda a,b: b.count - a.count if b.count != a.count else cmp(abs(a.estimatedModuleSize - avg), abs(a.estimatedModuleSize - avg))
-            self.possibleCenters.sort(cmp = comparer(average))
-
-            #del self.possibleCenters[3:]
-        pass
+            
+            self.possibleCenters.sort(cmp = lambda a,b: b.count - a.count if b.count != a.count else cmp(abs(a.estimatedModuleSize - average), abs(a.estimatedModuleSize - average)))
+            del self.possibleCenters[3:]
 
 
+        # Order patterns to shape like
+        #    
+        #        B -- C    1 -- 2    o -- y
+        #        |  /      |  /      |  /
+        #        | /       | /       | /
+        #        A         0         x
 
-    def orderBestPatterns(self, patternInfos):
-        pass
+        # distance between two point
+        distance = lambda a,b: sqrt( (a.posX-b.posX) ** 2 + (a.posY - b.posY) ** 2 )
+
+        # Z compoment of the cross product between vector BA and BC
+        crossProductZ = lambda a,b,c: (a.posX - b.posX) * (c.posY-b.posY) - (a.posY - b.posY) * (c.posX - b.posX)
+
+        patterns = self.possibleCenters
+        
+        zeroOneDistance = distance(patterns[0],patterns[1])
+        oneTwoDistance = distance(patterns[1], patterns[2])
+        zeroTwoDistance = distance(patterns[0], patterns[2])
+
+
+        if oneTwoDistance >= zeroOneDistance and oneTwoDistance >= zeroTwoDistance:
+            pointB = patterns[0]
+            pointA = patterns[1]
+            pointC = patterns[2]
+        elif zeroTwoDistance >= oneTwoDistance and  zeroTwoDistance >= zeroOneDistance:
+            pointB = patterns[1]
+            pointA = patterns[0]
+            pointC = patterns[2]
+        else:
+            pointB = patterns[2]
+            pointA = patterns[0]
+            pointC = patterns[1]
+
+        if crossProductZ(pointA, pointB, pointC) < 0:
+            pointA, pointC = pointC, pointA
+
+        patterns[0] = pointA
+        patterns[1] = pointB
+        patterns[2] = pointC
+
+        self.possibleCenters = patterns
+
+
 
 
 class AlignmentPattern(object):
@@ -444,4 +485,13 @@ class AlignmentPattern(object):
         combinedY = (self.posY + i) / 2.0
         combinedModuleSize = (self.estimatedModuleSize + newModuleSize) / 2.0
         return AlignmentPattern(combinedX, combinedY, combinedModuleSize)
+
+
+
+class Detector(object):
+    def __init__(self, image):
+        self.image = image
+
+    def detect(hints = None):
+        pass
 
