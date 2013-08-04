@@ -83,17 +83,17 @@ class FinderPatternFinder(object):
         if iSkip < FinderPatternFinder.MIN_SKIP or tryHarder:
             iSkip = FinderPatternFinder.MIN_SKIP
         done = False
-        stateCount = [0 for i in range(5)]
+        stateCount = [0 for i in xrange(5)]
 
         i = iSkip - 1
         while i < maxI and not done:
             currentState = 0
-            for j in range(maxJ):
+            for j in xrange(maxJ):
                 if self.image[i,j] == 0: # black pixel
-                    if currentState == 1 or currentState == 3 or currentState == 5: # Counting white pixels
+                    if currentState & 1 == 1: # Counting white pixels
                         currentState += 1
                 else : # white pixel
-                    if currentState == 0 or currentState == 2 or currentState == 4: # Counting black pixels
+                    if currentState & 1 == 0: # Counting black pixels
                         if currentState == 4: # A winner?
                             if self.foundPatternCross(stateCount): # Yes
                                 confirmed = self.handlePossibleCenter(stateCount,i,j)
@@ -117,22 +117,14 @@ class FinderPatternFinder(object):
                                             i += rowSkip - stateCount[2] -iSkip
                                             j = maxJ - 1
                                 else :
-                                    stateCount[0] = stateCount[2]
-                                    stateCount[1] = stateCount[3]
-                                    stateCount[2] = stateCount[4]
-                                    stateCount[3] = 1
-                                    stateCount[4] = 0
+                                    stateCount[0],stateCount[1],stateCount[2],stateCount[3],stateCount[4] = stateCount[2],stateCount[3],stateCount[4],1,0
                                     currentState = 3
                                     continue
                                 # Clear state to start looking again
                                 currentState = 0
                                 stateCount = [0 for i in range(5)]
                             else: # Pattern cross not found, shift counts back by two
-                                stateCount[0] = stateCount[2]
-                                stateCount[1] = stateCount[3]
-                                stateCount[2] = stateCount[4]
-                                stateCount[3] = 1
-                                stateCount[4] = 0
+                                stateCount[0],stateCount[1],stateCount[2],stateCount[3],stateCount[4] = stateCount[2],stateCount[3],stateCount[4],1,0
                                 currentState = 3
                         else:
                             currentState += 1
@@ -248,7 +240,7 @@ class FinderPatternFinder(object):
             check a vertical cross check and locate the real center of the alignment pattern.
         """
         maxJ = self.image.shape[1]
-        stateCount = [0 for i in range(5)]
+        stateCount = [0 for i in xrange(5)]
         j = startJ
 
         while j >= 0 and self.image[centerI,j] == 0:
@@ -403,7 +395,7 @@ class FinderPatternFinder(object):
                 totalModuleSize += size
                 square += size * size
             average = totalModuleSize / startSize
-            stdDev = sqrt(square / startSize - average * average)
+            stdDev = sqrt(square / startSize - average * average )
 
             # sort by nearest from average
             self.possibleCenters.sort(key=lambda x:abs(x.estimatedModuleSize - average))
@@ -424,16 +416,16 @@ class FinderPatternFinder(object):
 
         # Order patterns to shape like
         #    
-        #        B -- C    1 -- 2    o -- y
-        #        |  /      |  /      |  /
-        #        | /       | /       | /
-        #        A         0         x
+        #        B -- C    1 -- 2    o -- x
+        #        |  /      |  /      |  
+        #        | /       | /       | 
+        #        A         0         y
 
         # distance between two point
         distance = lambda a,b: sqrt( (a.posX-b.posX) ** 2 + (a.posY - b.posY) ** 2 )
 
         # Z compoment of the cross product between vector BA and BC
-        crossProductZ = lambda a,b,c: (a.posX - b.posX) * (c.posY-b.posY) - (a.posY - b.posY) * (c.posX - b.posX)
+        crossProductZ = lambda a,b,c: (c.posX - b.posX) * (a.posY-b.posY) - (c.posY - b.posY) * (a.posX - b.posX)
 
         patterns = self.possibleCenters
         
@@ -442,27 +434,17 @@ class FinderPatternFinder(object):
         zeroTwoDistance = distance(patterns[0], patterns[2])
 
 
-        if oneTwoDistance >= zeroOneDistance and oneTwoDistance >= zeroTwoDistance:
-            pointB = patterns[0]
-            pointA = patterns[1]
-            pointC = patterns[2]
-        elif zeroTwoDistance >= oneTwoDistance and  zeroTwoDistance >= zeroOneDistance:
-            pointB = patterns[1]
-            pointA = patterns[0]
-            pointC = patterns[2]
+        if zeroTwoDistance <= oneTwoDistance >= zeroOneDistance:
+            pointB, pointA, pointC  = patterns[0], patterns[1], patterns[2]
+        elif zeroOneDistance <= zeroTwoDistance >= oneTwoDistance:
+            pointB, pointA, pointC = patterns[1], patterns[0], patterns[2]
         else:
-            pointB = patterns[2]
-            pointA = patterns[0]
-            pointC = patterns[1]
+            pointB,pointA, pointC = patterns[2], patterns[0], patterns[1]
 
         if crossProductZ(pointA, pointB, pointC) < 0:
             pointA, pointC = pointC, pointA
 
-        patterns[0] = pointA
-        patterns[1] = pointB
-        patterns[2] = pointC
-
-        self.possibleCenters = patterns
+        self.possibleCenters = [pointA, pointB, pointC]
 
 
 
@@ -485,6 +467,109 @@ class AlignmentPattern(object):
         combinedY = (self.posY + i) / 2.0
         combinedModuleSize = (self.estimatedModuleSize + newModuleSize) / 2.0
         return AlignmentPattern(combinedX, combinedY, combinedModuleSize)
+
+
+
+class AlignmentPatternFinder(object):
+	def __init__(self, image, startX, startY, width, height, moduleSize, resultPointCallback):
+		""" image: Image to search
+			startX: Left column from which to start search
+			startY: Top row from which to start searching
+			width: Width of region to search
+			height: Height of region to search
+			moduleSize: Estimated module size so far
+		"""
+		self.image = image
+		self.possibleCenters = []
+		self.startX = startX
+		self.startY = startY
+		self.width = width
+		self.height = height
+		self.moduleSize = moduleSize
+		self.crossCheckStateCount = [0 for i in range(3)]
+		self.resultPointCallback = resultPointCallback
+		pass
+
+	def find(self):
+		startX = self.startX
+		height = self.height
+		maxJ = startX + width
+		middleI = startY + (height / 2)
+		# We are looking for black/white/black modules in 1:1:1 ratio;
+		# this tracks the number of black/white/black modules seen so far
+		
+		for iGen in range(height):
+			# Search from middle outwards
+			i = middleI + ((iGen+1)/2 if iGen%2==0 else -((iGen+1)/2))
+			stateCount = [0 for i in range(3)]
+			j = startX
+
+			# Burn off leading white pixels before anything else; if we start in the middle of
+			# a white run, it doesn't make sense to count its length, since we don't know if the
+			# white run continued to the left of the start point
+			while j < maxJ and self.image[i,j] == 255:
+				j += 1
+
+			currentState = 0
+			while j < maxJ:
+				if self.image[i,j] == 0: # Black pixel
+					if currentState == 1:
+						stateCount[currentState] += 1
+					else:
+						if currentState == 2: # A winner?
+							if self.foundPatternCross(stateCount): # Yes
+								confirmed = self.handlePossibleCenter(stateCount,i,j)
+								if confirmed is not None:
+									return confirmed
+							stateCount[0],stateCount[1],stateCount[2] = stateCount[2],1,0
+							currentState = 1
+						else:
+							currentState +=1
+							stateCount[currentState] += 1
+				else: # White Pixel
+					if currentState == 1: # Counting black pixels
+						currentState +=1
+					stateCount[currentState] += 1
+				j += 1
+			if self.foundPatternCross(stateCount):
+				confirmed = self.handlePossibleCenter(stateCount,i,maxJ)
+				if confirmed is not None:
+					return confirmed
+
+		# Nothing we saw was observed and confirmed twice. If we had
+		# any guess at all, return it 
+		if len(self.possibleCenters) > 0:
+			return self.possibleCenters[0]
+
+		return None
+
+	def centerFromEnd(self, stateCount, end):
+		""" Given a count of black/white/black pixels just seen and an end position,
+			figures the location of the center of this black/white/black run.
+		"""
+		return (end - stateCount[2]) - stateCount[1] / 2.0
+	
+	def foundPatternCross(self, stateCount):
+		""" stateCount: Count of black/white/black pixels just read
+			return: True if the proportions of the counts is close enough to the 1/1/1 ratios
+					used by alignment patterns to be considered a match
+		"""
+		moduleSize = self.moduleSize
+		maxVariance = self.moduleSize / 2.0
+		return all(map(lambda x:abs(moduleSize - x) < maxVariance, stateCount))
+
+	def crossCheckVertical(self, startI, centerJ, maxCount):
+		""" After a horizontal scan finds a potential alignment pattern, this method
+			"cross-checks" by scanning down vertically through the center of the possible
+			alignment pattern to see if the same proportion is detected.
+
+			startI: Row where an alignment pattern as detected
+			centerJ: Center of the section that appears to cross an alignment pattern
+			maxCount: Maximum reasonable number of modules that should be observed in any
+					  reading state, based on the results of the horizontal scan
+			return: Vertical center of alignment pattern, or None if not found
+		"""
+		
 
 
 
