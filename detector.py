@@ -73,7 +73,9 @@ class FinderPatternFinder(object):
 
     def find(hints = None):
         tryHarder = hints is not None and hints.has_key(DecodeHintType.TRY_HARDER)
-        maxI, maxJ = self.image.shape
+
+        image = self.image
+        maxI, maxJ = image.shape
 
         # We are looking for black/white/black/white/black modules in 1:1:3:1:1 ratio; this tracks the number of such modules seen so far
         # Let's assume that the maximun version QR Code we support takes up 1/4 the height of the image, 
@@ -89,7 +91,7 @@ class FinderPatternFinder(object):
         while i < maxI and not done:
             currentState = 0
             for j in xrange(maxJ):
-                if self.image[i,j] == 0: # black pixel
+                if image[i,j] == 0: # black pixel
                     if currentState & 1 == 1: # Counting white pixels
                         currentState += 1
                 else : # white pixel
@@ -179,17 +181,18 @@ class FinderPatternFinder(object):
                       based on the results of horizontal scan
             return: Vertical center of finder pattern, or None if not found
         """
-        maxI = self.image.shape[0]
+        image = self.image
+        maxI = image.shape[0]
         stateCount = [0 for i in range(5)]
         i = startI
         # Start counting up from center
-        while i >= 0 and self.image[i,centerJ] == 0:
+        while i >= 0 and image[i,centerJ] == 0:
             stateCount[2] += 1
             i -= 1
         if i < 0:
             return None
 
-        while i >=0 and self.image[i, centerJ] == 255 and stateCount[1] <= maxCount:
+        while i >=0 and image[i, centerJ] == 255 and stateCount[1] <= maxCount:
             stateCount[1] += 1
             i -= 1
 
@@ -197,7 +200,7 @@ class FinderPatternFinder(object):
         if i < 0 or stateCount[1] > maxCount:
             return None
 
-        while i >= 0 and self.image[i,centerJ] == 0 and stateCount[0] <= maxCount:
+        while i >= 0 and image[i,centerJ] == 0 and stateCount[0] <= maxCount:
             stateCount[0] += 1
             i -= 1
         if stateCount[0] > maxCount:
@@ -205,19 +208,19 @@ class FinderPatternFinder(object):
 
         # Count down from center
         i = startI + 1
-        while i < maxI and self.image[i,centerJ] == 0:
+        while i < maxI and image[i,centerJ] == 0:
             stateCount[2] += 1
             i += 1
         if i == maxI:
             return None
 
-        while i < maxI and self.image[i,centerJ] == 255 and stateCount[3] < maxCount:
+        while i < maxI and image[i,centerJ] == 255 and stateCount[3] < maxCount:
             stateCount[3] += 1
             i += 1
         if i == maxI or stateCount[3] >= maxCount:
             return None
 
-        while i < maxI and self.image[i,centerJ] == 0 and stateCount[4] < maxCount:
+        while i < maxI and image[i,centerJ] == 0 and stateCount[4] < maxCount:
             stateCount[4] += 1
             i += 1
         if stateCount[4] >= maxCount:
@@ -239,42 +242,43 @@ class FinderPatternFinder(object):
             except it reads horizontally instead of vertically. This is used to cross-cross
             check a vertical cross check and locate the real center of the alignment pattern.
         """
-        maxJ = self.image.shape[1]
+        image = self.image
+        maxJ = image.shape[1]
         stateCount = [0 for i in xrange(5)]
         j = startJ
 
-        while j >= 0 and self.image[centerI,j] == 0:
+        while j >= 0 and image[centerI,j] == 0:
             stateCount[2] += 1
             j -= 1
         if j < 0:
             return None
 
-        while j >= 0 and self.image[centerI,j] == 255:
+        while j >= 0 and image[centerI,j] == 255:
             stateCount[1] += 1
             j -= 1
         if j < 0 or stateCount[1] > maxCount :
             return None
 
-        while j >= 0 and self.image[centerI,j] == 0:
+        while j >= 0 and image[centerI,j] == 0:
             stateCount[0] += 1
             j -= 1
         if stateCount[0] > maxCount:
             return None
 
         j = startJ + 1
-        while j < maxJ and self.image[centerI,j] == 0:
+        while j < maxJ and image[centerI,j] == 0:
             stateCount[2] += 1
             j += 1
         if j == maxJ:
             return None
 
-        while j < maxJ and self.image[centerI,j] == 255:
+        while j < maxJ and image[centerI,j] == 255:
             stateCount[3] += 1
             j += 1
         if j == maxJ or stateCount[3] >= maxCount:
             return None
 
-        while j < maxJ and self.image[centerI,J] == 0:
+        while j < maxJ and image[centerI,J] == 0:
             stateCount[4] += 1
             j += 1
         if stateCount[4] >= maxCount:
@@ -319,7 +323,7 @@ class FinderPatternFinder(object):
                         break
                 if not found:
                     point = FinderPattern(centerJ, centerI, estimatedModuleSize)
-                    self.possibleCenters += point
+                    self.possibleCenters.append(point)
                     if self.resultPointCallback is not None:
                         self.resultPointCallback.foundPossibleResultPoint(point)
                 return True
@@ -397,14 +401,12 @@ class FinderPatternFinder(object):
             average = totalModuleSize / startSize
             stdDev = sqrt(square / startSize - average * average )
 
-            # sort by nearest from average
-            self.possibleCenters.sort(key=lambda x:abs(x.estimatedModuleSize - average))
+            # sort by farthest from average
+            self.possibleCenters.sort(key=lambda x:abs(x.estimatedModuleSize - average), reverse = True)
             limit = max(0.2 * average, stdDev)
-            while len(self.possibleCenters) > 3:
-                center = self.possibleCenters.pop()
-                if abs(center.estimatedModuleSize - average) <= limit:
-                    self.possibleCenters.append(center)
-                    break
+            while len(self.possibleCenters) > 3 and abs(center.possibleCenters[0].estimatedModuleSize - average) > limit:
+                self.possibleCenters.pop(0)
+                break
 
         if len(self.possibleCenters) > 3:
             totalModuleSize = sum(map(lambda x:x.estimatedModuleSize, self.possibleCenters))
@@ -486,11 +488,11 @@ class AlignmentPatternFinder(object):
 		self.width = width
 		self.height = height
 		self.moduleSize = moduleSize
-		self.crossCheckStateCount = [0 for i in range(3)]
 		self.resultPointCallback = resultPointCallback
 		pass
 
 	def find(self):
+        image = self.image
 		startX = self.startX
 		height = self.height
 		maxJ = startX + width
@@ -507,12 +509,12 @@ class AlignmentPatternFinder(object):
 			# Burn off leading white pixels before anything else; if we start in the middle of
 			# a white run, it doesn't make sense to count its length, since we don't know if the
 			# white run continued to the left of the start point
-			while j < maxJ and self.image[i,j] == 255:
+			while j < maxJ and image[i,j] == 255:
 				j += 1
 
 			currentState = 0
 			while j < maxJ:
-				if self.image[i,j] == 0: # Black pixel
+				if image[i,j] == 0: # Black pixel
 					if currentState == 1:
 						stateCount[currentState] += 1
 					else:
@@ -569,6 +571,56 @@ class AlignmentPatternFinder(object):
 					  reading state, based on the results of the horizontal scan
 			return: Vertical center of alignment pattern, or None if not found
 		"""
+        image = self.image
+        maxI = image.shape[0]
+        stateCount = [0 for i in range(3)]
+        i = startI
+        while i >= 0 and image[i, centerJ] == 0 and stateCount[1] <= maxCount:
+            stateCount[1] += 1
+            i -= 1
+        if i < 0 or stateCount[1] > maxCount:
+            return None
+
+        while i >= 0 and image[i, centerJ] == 255 and stateCount[0] <= maxCount:
+            stateCount[0] += 1
+            i -= 1
+        if stateCount[0] > maxCount:
+            return None
+
+        i = startI + 1
+        while i < maxI and image[i, centerJ] == 0 and stateCount[1] <= maxCount:
+            stateCount[1] += 1
+            i += 1
+        if i == maxI or stateCount[1] > maxCount:
+            return None
+        while i < maxI and image[i, centerJ] == 255 and stateCount[2] <= maxCount:
+            stateCount[2] += 1
+            i += 1
+        if stateCount[2] > maxCount:
+            return None
+
+        stateCountTotal = sum(stateCount)
+        if 5 * abs(stateCountTotal - originalStateCountTotal) >= 2 * originalStateCountTotal:
+            return None
+
+        return self.centerFromEnd(stateCount,i) if self.foundPatternCross(stateCount) else None
+
+    def handlePossibleCenter(stateCount, i, j):
+        stateCountTotal = sum(stateCount)
+        centerJ = self.centerFromEnd(stateCount, j)
+        centerI = self.crossCheckVertical(i, centerJ, 2* stateCount[1], stateCountTotal)
+        if centerI is not None:
+            estimatedModuleSize = sum(stateCount) / 3.0
+            for center in self.possibleCenters:
+                if center.aboutEquals(estimatedModuleSize, centerI, centerJ):
+                    return center.combineEstimate(centerI, centerJ, estimatedModuleSize)
+            point = AlignmentPattern(centerJ, centerI, estimatedModuleSize)
+            self.possibleCenters.append(point)
+            if self.resultPointCallback is not None:
+                self.resultPointCallback.foundPossibleResultPoint(point)
+        return None 
+
+
 		
 
 
@@ -578,5 +630,10 @@ class Detector(object):
         self.image = image
 
     def detect(hints = None):
+        finder = FinderPatternFinder(image)
+        info = finder.find()
+        return self.processFinderPatternInfo(info)
         pass
+
+    def 
 
