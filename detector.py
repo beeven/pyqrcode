@@ -55,7 +55,7 @@ class FinderPattern(object):
 class FinderPatternInfo(object):
     def __init__(self, patternCenters):
         self.bottomLeft = patternCenters[0]
-        self.topleft = patternCenters[1]
+        self.topLeft = patternCenters[1]
         self.topRight = patternCenters[2]
 
 
@@ -635,5 +635,21 @@ class Detector(object):
         return self.processFinderPatternInfo(info)
         pass
 
-    def 
+    def processFinderPatternInfo(info):
+        topLeft, topRight, bottomLeft = info.topLeft, info.topRight, info.bottomLeft
+
+        moduleSize = self.calculateModuleSize(topLeft, topRight, bottomLeft)
+        if moduleSize < 1.0:
+            return None
+
+        dimension = self.computeDimension(topLeft, topRight, bottomLeft, moduleSize)
+        provisionalVersion = 
+
+
+    def calculateModuleSize(topLeft, topRight, bottomLeft):
+        pass
+
+
+    def computeDimension(topLeft, topRight, bottomLeft, moduleSize)
+
 
