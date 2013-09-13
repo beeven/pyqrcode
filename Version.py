@@ -1,4 +1,4 @@
-
+import sys
 
 
 # ISO 18004:2006
@@ -14,13 +14,62 @@ class Version(object):
       0x209D5, 0x216F0, 0x228BA, 0x2379F, 0x24B0B,
       0x2542E, 0x26A64, 0x27541, 0x28C69]
 
+    VERSIONS = buildVersions()
+
     def __init__(self, versionNumber, alignmentPatternCenters, ecBlocks):
         self.versionNumber = versionNumber
         self.alignmentPatternCenters = alignmentPatternCenters
         self.ecBlocks = ecBlocks
         total = 0
-        ecCodewords = ecBlocks[0]
+        ecCodewords = ecBlocks[0].getTotalECCodewords()
+        ecbArray = ecBlocks[0].getECBlocks()
+        for ecBlock in ecbArray:
+            total += ecBlock.getCount() * (ecBlock.getDataCodewords() + ecCodewords)
+        self.totalCodewords = total
         pass
+
+    def getVersionNumber(self):
+        return self.versionNumber
+
+    def getAlignmentPatternCenters(self):
+        return self.alignmentPatternCenters
+
+    def getTotalCodewords(self):
+        return self.totalCodewords
+
+    def getDimensionForVersion(self):
+        return 17 + 4 * self.versionNumber
+
+    def getECBlocksForLevel(self, ecLevel):
+        return self.ecBlocks[ecLevel.ordinal()]
+
+    @staticmethod
+    def getProvisionalVersionsForDimension(dimension):
+        if dimension % 4 != 1:
+            raise Exception("Format Error")
+        try:
+            return getVersionForNumber((dimension - 17) >> 2)
+        except Exception,e:
+            raise Exception("Format Error")
+
+    @staticmethod
+    def getVersionForNumber(versionNumber):
+        if version < 1 or versionNumber > 40:
+            raise Exception("Illegal argument")
+        return Version.VERSIONS[versionNumber - 1]
+
+    @staticmethod
+    def decodeVersionInformation(versionBits):
+        bestDifference = sys.maxint
+        bestVersion = 0
+        for i in range(len(Version.VERSION_DECODE_INFO)):
+            targetVersion = Version.VERSION_DECODE_INFO[i]
+            if targetVersion == versionBits:
+                return Version.getVersionForNumber(i + 7)
+
+
+
+
 
 
 
